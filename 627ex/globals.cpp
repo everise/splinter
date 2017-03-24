@@ -18,7 +18,7 @@ unsigned int* pTestUsersRatings_SmallLTR		= 0;
 
 //Gradient Descent:
 int iterations					= 6;
-double itemsStep				= 0.005;
+double itemsStep				= 0.001;
 double itemsReg					= 1;
 double usersStep				= 0.3;
 double usersReg					= 1;
