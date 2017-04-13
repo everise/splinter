@@ -2,6 +2,9 @@
 #include <fstream>
 using namespace std;
 
+double scoreaverage[296111]={0};
+int countitem[296111]={0};
+
 class String
 {
 private:
@@ -163,6 +166,8 @@ public:
         {
             item[i]=a[2*i+1].Getuseritem();
             score[i]=a[2*i+2].Getuseritem();
+            countitem[item[i]]++;
+            scoreaverage[item[i]]=(scoreaverage[item[i]]*(countitem[item[i]]-1)+score[i])/countitem[item[i]];
         }
     }
     Trainidx()
@@ -252,7 +257,7 @@ public:
         for(i=0;i<count+1;i++)
             item[i]=0;
         c[0]=-1;
-        c[count+1]=len;;
+        c[count+1]=len;
         int j=1;
         for(i=0;i<len;i++)
             if(str[i]=='|')
@@ -396,13 +401,15 @@ int main()
     }
     fin3.close();
 
+//    for(int i=0;i<296111;i++)
+//        cout<<scoreaverage[i]<<" "<<countitem[i]<<endl;
     cout<<"recommending..."<<endl;
     int count=0;
     int num=0;
-    int* tempscore;
-    int genrescore=0;
-    int score[6]={0};
-    int box[6]={0};
+    double* tempscore;
+    double genrescore=0;
+    double score[6]={0};
+    double box[6]={0};
     int recm=0;
     char rec[6];
     ofstream fout("result.txt");
@@ -412,7 +419,7 @@ int main()
         for(int l=0;l<6;l++)
         {
             count=track[test[k].Gettrack()[l]].Getcount();
-            tempscore=new int [count];
+            tempscore=new double [count];
             for(int m=0;m<count;m++)
                 tempscore[m]=0;
             for(int m=1;m<=count;m++)
@@ -425,17 +432,17 @@ int main()
                         break;
                     }
                     else
-                        tempscore[m-1]=0;
+                        tempscore[m-1]=0;//(int)(scoreaverage[track[test[k].Gettrack()[l]].Getitem()[m]]+0.5);//
                 }
             }
             if(count<=2)
-                score[l]=tempscore[0]*100+tempscore[1]*10;
+                score[l]=tempscore[0]*1000+tempscore[1]*100+scoreaverage[test[k].Gettrack()[l]];
             else
             {
                 for(int o=2;o<count;o++)
                     genrescore+=tempscore[o];
                 genrescore=genrescore/(count-2);
-                score[l]=tempscore[0]*100+tempscore[1]*10+genrescore;
+                score[l]=tempscore[0]*1000+tempscore[1]*100+genrescore*10+scoreaverage[test[k].Gettrack()[l]];
             }
             delete [] tempscore;
             genrescore=0;
