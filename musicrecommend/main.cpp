@@ -421,12 +421,12 @@ int main()
     fin3.close();
 
     int ii=0;
-    for(int i=0;i<40265;i++)//获取评分数大于500的种子用户
+    for(int i=0;i<40265;i++)//获取评分数大于threshold的种子用户
         if(train[i].Getnum()>threshold)
             seeduser[ii++]=i;
     cout<<"seeduser: "<<ii<<endl;
     ii=0;
-    for(int i=0;i<296111;i++)//获取被评分次数大于500的种子项目
+    for(int i=0;i<296111;i++)//获取被评分次数大于threshold的种子项目
         if(countitem[i]>threshold)
             seeditem[ii++]=i;
     cout<<"seeditem: "<<ii<<endl;
@@ -460,6 +460,7 @@ int main()
     double denominator1=0;//用户协同过滤分母1
     double denominator2=0;//用户协同过滤分母2
     double trackscore=0;//推荐曲目track部分分数（从相似种子用户中获得）
+    double albumscore=0;//推荐曲目album部分分数（从相似种子用户中获得）
     double* tempscore;//存用户待推荐首曲目的各项评分（album，artist，genre...）
     double genrescore=0;//待评分曲目的genre得分
     sim score[6];//存用户待推荐6首曲目的最终得分
@@ -504,7 +505,7 @@ int main()
         cout<<"progress: "<<(k/15714.0)*100<<"%"<<endl;//显示当前进度
         for(int l=0;l<6;l++)
         {
-            for(int j=0,p=0;j<pick;j++)//找出相似度前30的种子用户（不为0），如果他们对该曲目打过分，该曲目分数为他们打分的平均分
+            for(int j=0,p=0,q=0;j<pick;j++)//找出相似度前30的种子用户（不为0），如果他们对该曲目、专辑打过分，该项目分数为他们打分的平均分
             {
                 if(similar[j].index!=0)
                 {
@@ -515,7 +516,11 @@ int main()
                         {
                             p++;
                             trackscore=(trackscore*(p-1)+train[seeduser[similar[j].no]].Getscore()[n])/p;
-                            break;
+                        }
+                        if(track[test[k].Gettrack()[l]].Getitem()[1]==train[seeduser[similar[j].no]].Getitem()[n])
+                        {
+                            q++;
+                            albumscore=(albumscore*(q-1)+train[seeduser[similar[j].no]].Getscore()[n])/q;
                         }
                     }
                 }
@@ -547,9 +552,12 @@ int main()
                 genrescore=genrescore/(count-2);//该曲目中该用户对各个genre打分的平均分
                 score[l].index=tempscore[0]*100+tempscore[1]*10+genrescore*1+trackscore*3;
             }
+            if(score[l].index==0)//如果依然没有评分，参考相似用户对此曲目的专辑的分数
+                score[l].index=albumscore*0.1;
             delete [] tempscore;
             genrescore=0;
             trackscore=0;
+            albumscore=0;
         }
         for(int p=0;p<3;p++)//6首歌选出最高的三首从高到低排序
         {
