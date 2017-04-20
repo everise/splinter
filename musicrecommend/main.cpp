@@ -1,5 +1,6 @@
 #include <iostream>
 #include <fstream>
+#include <cmath>
 using namespace std;
 /*
  * Testidx2.txt
@@ -20,8 +21,15 @@ using namespace std;
  * TrackData2.txt
  * track|album|artist|genre1|genre2|...
  */
+#define threshold 500
+#define su 4192 //评分次数超过threshold的种子用户数
+#define si 2145 //被评分次数超过threshold的种子项目数
+#define pick 30 //选中用来参考的种子用户数，试出来的
 double scoreaverage[296111]={0};//存每一项的平均分（track,album,artist,genre等）
 int countitem[296111]={0};//存每一项被评分次数
+int seeduser[su]={0};//种子用户
+int seeditem[si]={0};//种子项目
+int seedscore[su][si]={{0}};//种子用户的种子项目的分数
 
 class String //处理文件Testidx2.txt和Trainidx2.txt里每一行的文本
 {
@@ -184,8 +192,10 @@ public:
         {
             item[i]=a[2*i+1].Getuseritem();
             score[i]=a[2*i+2].Getuseritem();
+            if(score[i]==0)//评分为0则改为1，与未评分项目区分
+                score[i]=1;
             countitem[item[i]]++;
-            scoreaverage[item[i]]=(scoreaverage[item[i]]*(countitem[item[i]]-1)+score[i])/countitem[item[i]];
+            scoreaverage[item[i]]=(scoreaverage[item[i]]*(countitem[item[i]]-1)+score[i])/countitem[item[i]];//该项目平均分
         }
     }
     Trainidx()
@@ -345,6 +355,12 @@ public:
     }
 };
 
+struct sim//存放用于冒泡排序的对象
+{
+    int no=0;
+    double index=0;
+};
+
 int main()
 {
     char a[10];
@@ -357,7 +373,6 @@ int main()
     {
         fin1>>a;
         b=String(a);//读该用户第一行（用户编号|6）
-//        cout<<b.Getuser()<<endl;
         c=new String [7];//一个用户共有七行文本
         c[0]=String(a);
         for(int i=1;i<7;i++)
@@ -367,10 +382,6 @@ int main()
         }
         test[k]=Testidx(c);//一个用户数据存入test[]中
         delete [] c;
-//        for(int i=0;i<6;i++)
-//        {
-//            cout<<i+1<<" "<<test[k].Gettrack()[i]<<endl;
-//        }
     }
     fin1.close();
 
@@ -381,8 +392,6 @@ int main()
     {
         fin2>>a;
         b=String(a);//读该用户第一行（用户编号|评分项目项数）
-//        cout<<b.Getuser()<<'|';
-//        cout<<b.Getitemnum()<<endl;
         int num=b.Getitemnum()*2+1;//一个用户的文本行数
         c=new String [num];//存一个用户全部文本
         c[0]=String(a);
@@ -393,10 +402,6 @@ int main()
         }
         train[k]=Trainidx(c);//一个用户数据存入train[]中
         delete [] c;
-//        for(int i=0;i<b.Getitemnum();i++)
-//        {
-//            cout<<train[k].Getitem()[i]<<" "<<train[k].Getscore()[i]<<endl;
-//        }
     }
     fin2.close();
 
@@ -412,30 +417,109 @@ int main()
         d=Trackdata(a1);//一条曲目的信息
         j=d.Getitem()[0];//该曲目编号
         track[j]=d;//存入对应编号的track[]中
-//        cout<<track[j].Getitem()[0]<<endl;
-//        for(int i=0;i<=track[j].Getcount();i++)
-//            cout<<track[j].Getitem()[i]<<'|';
-//        cout<<endl;
     }
     fin3.close();
 
-//    for(int i=0;i<296111;i++)
-//        cout<<scoreaverage[i]<<" "<<countitem[i]<<endl;
-    cout<<"recommending..."<<endl;
+    int ii=0;
+    for(int i=0;i<40265;i++)//获取评分数大于500的种子用户
+        if(train[i].Getnum()>threshold)
+            seeduser[ii++]=i;
+    cout<<"seeduser: "<<ii<<endl;
+    ii=0;
+    for(int i=0;i<296111;i++)//获取被评分次数大于500的种子项目
+        if(countitem[i]>threshold)
+            seeditem[ii++]=i;
+    cout<<"seeditem: "<<ii<<endl;
+    cout<<"building similarity database......"<<endl;
+    int num0=0;
+    for(int i=0;i<su;i++)//获取种子用户的种子项目的分数
+    {
+        num0=train[seeduser[i]].Getnum();
+        for(int j=0;j<si;j++)
+        {
+            for(int k=0;k<num0;k++)
+            {
+                if(seeditem[j]==train[seeduser[i]].Getitem()[k])
+                {
+                    seedscore[i][j]=train[seeduser[i]].Getscore()[k];
+                    break;
+                }
+                else
+                    seedscore[i][j]=1;
+            }
+        }
+    }
+
+    cout<<"recommending......"<<endl;
     int count=0;//某一曲目的项目数（不包括track）
     int num=0;//用户在trainidx里的评分项目项数
+    //double similar[su]={0};//存放目标用户与种子用户相似度
+    sim similar[su];//存放目标用户与种子用户相似度
+    double testscore[si]={0};//存放目标用户的种子项目的分数
+    double numerator=0;//用户协同过滤分子
+    double denominator1=0;//用户协同过滤分母1
+    double denominator2=0;//用户协同过滤分母2
+    double trackscore=0;//推荐曲目track部分分数（从相似种子用户中获得）
     double* tempscore;//存用户待推荐首曲目的各项评分（album，artist，genre...）
     double genrescore=0;//待评分曲目的genre得分
-    double score[6]={0};//存用户待推荐6首曲目的最终得分
-    double box[6]={0};//从高到低存6个曲目分数
-    int recm=0;//已推荐曲目数（0～3）
-    char rec[6];//存6个曲目的‘1’或‘0’
+    sim score[6];//存用户待推荐6首曲目的最终得分
+    char rec[6]={'0','0','0','0','0','0'};//存6个曲目的‘1’或‘0’
     ofstream fout("result.txt");//结果写入result.txt
     for(int k=0;k<15715;k++)
     {
         num=train[test[k].Getuser()].Getnum();
+        for(int j=0;j<si;j++)//获得目标用户的种子项目的分数
+        {
+            for(int n=0;n<num;n++)
+            {
+                if(seeditem[j]==train[test[k].Getuser()].Getitem()[n])
+                {
+                    testscore[j]=train[test[k].Getuser()].Getscore()[n];
+                    break;
+                }
+                else
+                    testscore[j]=0;
+            }
+        }
+        for(int i=0;i<su;i++)//通过用户协同过滤计算目标用户与种子用户相似度
+        {
+            for(int j=0;j<si;j++)
+            {
+                numerator+=testscore[j]*seedscore[i][j];
+                denominator1+=testscore[j]*testscore[j];
+                denominator2+=seedscore[i][j]*seedscore[i][j];
+            }
+            similar[i].no=i;
+            similar[i].index=numerator/sqrt(denominator1*denominator2);
+            if(denominator1==0||denominator2==0)
+                similar[i].index=0;
+            numerator=denominator1=denominator2=0;
+        }
+        for(int p=0;p<pick;p++)//对该用户与种子用户相似度前pick个从高到低排序
+        {
+            for(int q=su-1;q>p;q--)
+                if(similar[q].index>similar[q-1].index)
+                    swap(similar[q],similar[q-1]);
+        }
+        cout<<"progress: "<<(k/15714.0)*100<<"%"<<endl;//显示当前进度
         for(int l=0;l<6;l++)
         {
+            for(int j=0,p=0;j<pick;j++)//找出相似度前30的种子用户（不为0），如果他们对该曲目打过分，该曲目分数为他们打分的平均分
+            {
+                if(similar[j].index!=0)
+                {
+                    num0=train[seeduser[similar[j].no]].Getnum();
+                    for(int n=0;n<num0;n++)
+                    {
+                        if(test[k].Gettrack()[l]==train[seeduser[similar[j].no]].Getitem()[n])
+                        {
+                            p++;
+                            trackscore=(trackscore*(p-1)+train[seeduser[similar[j].no]].Getscore()[n])/p;
+                            break;
+                        }
+                    }
+                }
+            }
             count=track[test[k].Gettrack()[l]].Getcount();
             tempscore=new double [count];
             for(int m=0;m<count;m++)
@@ -450,70 +534,35 @@ int main()
                         break;
                     }
                     else
-                        tempscore[m-1]=0;//(int)(scoreaverage[track[test[k].Gettrack()[l]].Getitem()[m]]+0.5);//
+                        tempscore[m-1]=0;
                 }
             }
-            if(count<=2)//若果该曲目只有album和artist两项，得分取该用户打分album*1000+artist*100+该曲目平均分
-                score[l]=tempscore[0]*1000+tempscore[1]*100+scoreaverage[test[k].Gettrack()[l]];
-            else//若果该曲目有album和artist以及genre项目，得分取该用户打分album*1000+artist*100+genre该用户所打平均分*10+该曲目平均分
+            score[l].no=l;
+            if(count<=2)//若果该曲目只有album和artist两项，得分取该用户打分album*100+artist*10+该曲目相似分*50,50试出来的
+                score[l].index=tempscore[0]*100+tempscore[1]*10+trackscore*50;
+            else//若果该曲目有album和artist以及genre项目，得分取该用户打分album*100+artist*10+genre该用户所打平均分*1+该曲目平均分*3，3试出来的
             {
                 for(int o=2;o<count;o++)
                     genrescore+=tempscore[o];
                 genrescore=genrescore/(count-2);//该曲目中该用户对各个genre打分的平均分
-                score[l]=tempscore[0]*1000+tempscore[1]*100+genrescore*10+scoreaverage[test[k].Gettrack()[l]];
+                score[l].index=tempscore[0]*100+tempscore[1]*10+genrescore*1+trackscore*3;
             }
             delete [] tempscore;
             genrescore=0;
+            trackscore=0;
         }
-        for(int p=0;p<6;p++)
+        for(int p=0;p<3;p++)//6首歌选出最高的三首从高到低排序
         {
-            box[p]=score[p];
-            rec[p]='0';
-        }
-        for(int p=0;p<5;p++)//box中对6首歌的分数从高到低排序
-        {
-            for(int q=0;q<5-p;q++)
-                if(box[q]<box[q+1])
-                    swap(box[q],box[q+1]);
-        }
-//        for(int p=0;p<6;p++)
-//            cout<<p<<" "<<score[p]<<endl;
-        for(int p=0;p<6;p++)//选出分最高的歌,最多3首歌
-        {
-            if(score[p]==box[0])
-            {
-                recm++;
-                if(recm<=3)
-                    rec[p]='1';
-            }
-        }
-        if(box[1]!=box[0])//分次高的歌，最多3首歌
-        {
-            for(int p=0;p<6;p++)
-            {
-                if(score[p]==box[1])
-                {
-                    recm++;
-                    if(recm<=3)
-                        rec[p]='1';
-                }
-            }
-        }
-        if(box[2]!=box[1])//分第三高的歌，最多3首歌
-        {
-            for(int p=0;p<6;p++)
-            {
-                if(score[p]==box[2])
-                {
-                    recm++;
-                    if(recm<=3)
-                        rec[p]='1';
-                }
-            }
+            for(int q=5;q>p;q--)
+                if(score[q].index>score[q-1].index)
+                    swap(score[q],score[q-1]);
+            rec[score[p].no]='1';
         }
         for(int p=0;p<6;p++)//该用户的推荐结果写入result.txt
+        {
             fout<<rec[p]<<endl;
-        recm=0;
+            rec[p]='0';
+        }
     }
     cout<<"complete!"<<endl;
 }
