@@ -21,10 +21,10 @@ using namespace std;
  * TrackData2.txt
  * track|album|artist|genre1|genre2|...
  */
-#define threshold 500
+#define threshold 500 //在一定范围内，threshold越小精确度越高，但是运算量越大
 #define su 4192 //评分次数超过threshold的种子用户数
 #define si 2145 //被评分次数超过threshold的种子项目数
-#define pick 30 //选中用来参考的种子用户数，试出来的
+#define pick 30 //选中用来参考的种子用户数，与su正相关，试出来的
 double scoreaverage[296111]={0};//存每一项的平均分（track,album,artist,genre等）
 int countitem[296111]={0};//存每一项被评分次数
 int seeduser[su]={0};//种子用户
@@ -461,6 +461,8 @@ int main()
     double denominator2=0;//用户协同过滤分母2
     double trackscore=0;//推荐曲目track部分分数（从相似种子用户中获得）
     double albumscore=0;//推荐曲目album部分分数（从相似种子用户中获得）
+    double trackscore2=0;//推荐曲目track部分分数（从目标用户相似曲目中获得）
+    sim* similarcount;//存放相似项目数
     double* tempscore;//存用户待推荐首曲目的各项评分（album，artist，genre...）
     double genrescore=0;//待评分曲目的genre得分
     sim score[6];//存用户待推荐6首曲目的最终得分
@@ -502,7 +504,7 @@ int main()
                 if(similar[q].index>similar[q-1].index)
                     swap(similar[q],similar[q-1]);
         }
-        cout<<"progress: "<<(k/15714.0)*100<<"%"<<endl;//显示当前进度
+
         for(int l=0;l<6;l++)
         {
             for(int j=0,p=0,q=0;j<pick;j++)//找出相似度前30的种子用户（不为0），如果他们对该曲目、专辑打过分，该项目分数为他们打分的平均分
@@ -525,7 +527,49 @@ int main()
                     }
                 }
             }
+
             count=track[test[k].Gettrack()[l]].Getcount();
+            similarcount=new sim [num];
+            for(int n=0;n<num;n++)
+            {
+                similarcount[n].index=0;
+                similarcount[n].no=0;
+            }
+            for(int n=0;n<num;n++)//计算目标曲目与该用户已评分曲目的相似度
+            {
+                similarcount[n].no=n;
+                if(track[train[test[k].Getuser()].Getitem()[n]].Getcount()>0)//判断该项目是否是曲目
+                {
+                    if(track[test[k].Gettrack()[l]].Getitem()[1]==track[train[test[k].Getuser()].Getitem()[n]].Getitem()[1]&&track[test[k].Gettrack()[l]].Getitem()[1]!=0)
+                        similarcount[n].index++;//album相同
+                    if(track[test[k].Gettrack()[l]].Getitem()[2]==track[train[test[k].Getuser()].Getitem()[n]].Getitem()[2]&&track[test[k].Gettrack()[l]].Getitem()[2]!=0)
+                        similarcount[n].index++;//artist相同
+                }
+                for(int m=3;m<=count;m++)
+                {
+                    for(int p=3;p<=track[train[test[k].Getuser()].Getitem()[n]].Getcount();p++)
+                    {
+                        if(track[test[k].Gettrack()[l]].Getitem()[m]==track[train[test[k].Getuser()].Getitem()[n]].Getitem()[p])
+                            similarcount[n].index++;//genre相同
+                    }
+                }
+            }
+            for(int m=0;m<15;m++)
+            {
+                for(int n=num-1;n>m;n--)//找出相似度最高9首的曲目
+                {
+                    if(similarcount[n].index>similarcount[n-1].index)
+                        swap(similarcount[n],similarcount[n-1]);
+                }
+            }
+            for(int m=0;m<9;m++)//曲目分2=9首相似曲目得分*相似度 之和，9试出来的
+            {
+                if(similarcount[m].index>0)
+                    trackscore2=trackscore2+train[test[k].Getuser()].Getscore()[similarcount[m].no]*similarcount[m].index/count;
+                else
+                    break;
+            }
+
             tempscore=new double [count];
             for(int m=0;m<count;m++)
                 tempscore[m]=0;
@@ -543,23 +587,26 @@ int main()
                 }
             }
             score[l].no=l;
-            if(count<=2)//若果该曲目只有album和artist两项，得分取该用户打分album*100+artist*10+该曲目相似分*50,50试出来的
-                score[l].index=tempscore[0]*100+tempscore[1]*10+trackscore*50;
-            else//若果该曲目有album和artist以及genre项目，得分取该用户打分album*100+artist*10+genre该用户所打平均分*1+该曲目平均分*3，3试出来的
+            if(count<=2)//若果该曲目只有album和artist两项，得分取该用户打分album*100+artist*10+该曲目相似分1*3.2+该曲目相似分2*2.5
+                score[l].index=tempscore[0]*100+tempscore[1]*10+trackscore*3.2*+trackscore2*2.5;
+            else//若果该曲目有album和artist以及genre项目，得分取该用户打分album*100+artist*10+genre该用户所打平均分*0.5+该曲目相似分1*3.2+该曲目相似分2*2.5，3.2和2.5试出来的
             {
                 for(int o=2;o<count;o++)
                     genrescore+=tempscore[o];
                 genrescore=genrescore/(count-2);//该曲目中该用户对各个genre打分的平均分
-                score[l].index=tempscore[0]*100+tempscore[1]*10+genrescore*1+trackscore*3;
+                score[l].index=tempscore[0]*100+tempscore[1]*10+genrescore*0.5+trackscore*3.2+trackscore2*2.5;
             }
             if(score[l].index==0)//如果依然没有评分，参考相似用户对此曲目的专辑的分数
-                score[l].index=albumscore*0.1;
+                score[l].index=albumscore*1;
             delete [] tempscore;
+            delete [] similarcount;
             genrescore=0;
             trackscore=0;
             albumscore=0;
+            trackscore2=0;
         }
-        for(int p=0;p<3;p++)//6首歌选出最高的三首从高到低排序
+
+        for(int p=0;p<3;p++)//6首歌选出最高的3首从高到低排序
         {
             for(int q=5;q>p;q--)
                 if(score[q].index>score[q-1].index)
@@ -571,6 +618,7 @@ int main()
             fout<<rec[p]<<endl;
             rec[p]='0';
         }
+        cout<<"progress: "<<(k/15714.0)*100<<"%"<<endl;//显示当前进度
     }
     cout<<"complete!"<<endl;
 }
