@@ -21,10 +21,12 @@ using namespace std;
  * TrackData2.txt
  * track|album|artist|genre1|genre2|...
  */
-#define threshold 500 //在一定范围内，threshold越小精确度越高，但是运算量越大
-#define su 4192 //评分次数超过threshold的种子用户数
-#define si 2145 //被评分次数超过threshold的种子项目数
-#define pick 30 //选中用来参考的种子用户数，与su正相关，试出来的
+#define threshold 500 //在一定范围内，threshold越小精确度越高，但是运算量急剧增加(2000,1000,500)
+#define su 4192 //评分次数超过threshold的种子用户数(771,1987,4192)
+#define si 2145 //被评分次数超过threshold的种子项目数(413,818,2145)
+#define pick 20 //选中用来参考的种子用户数，与su正相关，试出来的(6,13,20)
+//30秒:92.16%; 1.5分钟:92.33%; 4.5分钟:92.58%;
+
 double scoreaverage[296111]={0};//存每一项的平均分（track,album,artist,genre等）
 int countitem[296111]={0};//存每一项被评分次数
 int seeduser[su]={0};//种子用户
@@ -554,7 +556,7 @@ int main()
                     }
                 }
             }
-            for(int m=0;m<15;m++)
+            for(int m=0;m<9;m++)
             {
                 for(int n=num-1;n>m;n--)//找出相似度最高9首的曲目
                 {
@@ -587,14 +589,14 @@ int main()
                 }
             }
             score[l].no=l;
-            if(count<=2)//若果该曲目只有album和artist两项，得分取该用户打分album*100+artist*10+该曲目相似分1*3.2+该曲目相似分2*2.5
-                score[l].index=tempscore[0]*100+tempscore[1]*10+trackscore*3.2*+trackscore2*2.5;
-            else//若果该曲目有album和artist以及genre项目，得分取该用户打分album*100+artist*10+genre该用户所打平均分*0.5+该曲目相似分1*3.2+该曲目相似分2*2.5，3.2和2.5试出来的
+            if(count<=2)//若果该曲目只有album和artist两项，得分取该用户打分album*100+artist*10+该曲目相似分1*20+该曲目相似分2*2.5, 20试出来的
+                score[l].index=tempscore[0]*100+tempscore[1]*10+trackscore*20+trackscore2*2.5;
+            else//若果该曲目有album和artist以及genre项目，得分取该用户打分album*100+artist*10+genre该用户所打平均分*0.5+该曲目相似分1*3.6+该曲目相似分2*2.5，3.6和2.5试出来的
             {
                 for(int o=2;o<count;o++)
                     genrescore+=tempscore[o];
                 genrescore=genrescore/(count-2);//该曲目中该用户对各个genre打分的平均分
-                score[l].index=tempscore[0]*100+tempscore[1]*10+genrescore*0.5+trackscore*3.2+trackscore2*2.5;
+                score[l].index=tempscore[0]*100+tempscore[1]*10+genrescore*0.5+trackscore*3.6+trackscore2*2.5;
             }
             if(score[l].index==0)//如果依然没有评分，参考相似用户对此曲目的专辑的分数
                 score[l].index=albumscore*1;
